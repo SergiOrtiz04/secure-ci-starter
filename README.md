@@ -7,9 +7,9 @@ Actions security pipeline: dependency audit, secret scanning, SAST, dependency
 review and CodeQL. Fork it to start a new service with the checks already on,
 or copy the `.github/` folder into an existing repo.
 
-<!-- Replace OWNER with your GitHub user/org once the repo is pushed. -->
-[![CI](https://github.com/OWNER/secure-ci-starter/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/secure-ci-starter/actions/workflows/ci.yml)
-[![Security](https://github.com/OWNER/secure-ci-starter/actions/workflows/security.yml/badge.svg)](https://github.com/OWNER/secure-ci-starter/actions/workflows/security.yml)
+
+[![CI](https://github.com/SergiOrtiz04/secure-ci-starter/actions/workflows/ci.yml/badge.svg)](https://github.com/SergiOrtiz04/secure-ci-starter/actions/workflows/ci.yml)
+[![Security](https://github.com/SergiOrtiz04/secure-ci-starter/actions/workflows/security.yml/badge.svg)](https://github.com/SergiOrtiz04/secure-ci-starter/actions/workflows/security.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.19-brightgreen.svg)](package.json)
 
