@@ -1,0 +1,17 @@
+# Paths Semgrep should not scan. Same spirit as .gitignore but for SAST.
+# Semgrep already skips .gitignore'd paths; this file adds project-specific
+# noise reducers. Keep it SHORT — every exclusion is a blind spot.
+
+# Build output and third-party code
+dist/
+node_modules/
+coverage/
+
+# Tests: they intentionally send malformed input and fake credentials, which
+# triggers rules that are correct for production code but noisy here.
+test/
+
+# Lockfiles and docs
+package-lock.json
+docs/
+*.md

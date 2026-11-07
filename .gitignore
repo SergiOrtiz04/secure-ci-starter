@@ -1,0 +1,25 @@
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+
+# Environment files — never commit real values. `.env.example` is tracked.
+.env
+.env.*
+!.env.example
+
+# Scanner output
+semgrep.sarif
+gitleaks-report.json
+*.sarif
+
+# Logs and OS noise
+npm-debug.log*
+*.log
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp

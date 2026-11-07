@@ -1,0 +1,38 @@
+# Dependabot: automated dependency update PRs.
+# Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates
+#
+# Each PR runs the full CI + Security pipeline, so a bump that introduces a
+# vulnerability or breaks a test is caught before merge.
+version: 2
+updates:
+  # npm packages: weekly, grouped so you review one PR instead of fifteen.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: America/Guatemala
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+      prod-dependencies:
+        dependency-type: production
+        update-types: [minor, patch]
+    labels: [dependencies]
+    commit-message:
+      prefix: 'chore(deps)'
+
+  # GitHub Actions used in .github/workflows — these are dependencies too.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: America/Guatemala
+    labels: [dependencies, ci]
+    commit-message:
+      prefix: 'chore(actions)'

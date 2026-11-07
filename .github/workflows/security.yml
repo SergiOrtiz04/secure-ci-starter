@@ -1,0 +1,232 @@
+# ---------------------------------------------------------------------------
+# Security pipeline
+#
+# Five independent jobs. Each one answers a different question:
+#
+#   dependency-audit   "Do my installed packages have known CVEs?"
+#   secret-scan        "Did anyone commit a credential, token or private key?"
+#   sast               "Does the code itself contain insecure patterns?"
+#   dependency-review  "Does THIS pull request introduce a vulnerable package?"
+#   codeql             "Can a deeper dataflow analysis find injection / taint bugs?"
+#
+# Design choices worth copying into your own repos:
+#   - `permissions:` is set to the minimum at the top and widened per job only
+#     where an action genuinely needs it (SARIF upload, PR comments).
+#   - Every third-party action is pinned to a release tag. For stricter
+#     supply-chain hygiene, pin to a full commit SHA instead (Dependabot keeps
+#     SHA pins updated too).
+#   - `concurrency` cancels superseded runs on the same branch to save minutes.
+#   - A weekly `schedule` re-runs the scans even when nobody pushes, because
+#     new CVEs are published against OLD code every day.
+# ---------------------------------------------------------------------------
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Every Monday at 06:00 UTC. New advisories land constantly; a weekly
+    # re-scan catches them even when the repo is quiet.
+    - cron: '0 6 * * 1'
+  workflow_dispatch: # allow manual runs from the Actions tab
+
+# Least privilege by default. Jobs that need more declare it explicitly.
+permissions:
+  contents: read
+
+# One run per branch/PR at a time; a newer push cancels the older run.
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 22 # Node 20 reached end-of-life in April 2026; the code runs on >=20.19
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Known vulnerabilities in dependencies (npm audit) + an outdated report.
+  #
+  # `--audit-level=high` fails the job on HIGH or CRITICAL only. Moderate/low
+  # findings are still printed so they are visible, but they do not block.
+  # Tune this to your risk appetite; many teams start at `high` and tighten
+  # to `moderate` once the backlog is clean.
+  # ---------------------------------------------------------------------------
+  dependency-audit:
+    name: npm audit (high+) and outdated report
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # `npm ci` installs exactly what the lockfile says; `npm install` could
+      # silently resolve to different (possibly vulnerable) versions.
+      - name: Install dependencies (from lockfile)
+        run: npm ci
+
+      - name: npm audit (fail on high/critical)
+        run: npm audit --audit-level=high
+
+      # `npm outdated` exits 1 whenever anything is outdated, which is almost
+      # always. We only want the report, so we swallow the exit code and
+      # publish the table to the job summary.
+      - name: Outdated dependencies summary
+        if: always()
+        run: |
+          {
+            echo "## Outdated dependencies"
+            echo
+            echo '```'
+            npm outdated || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # 2. Secret scanning with gitleaks.
+  #
+  # Scans the FULL git history (fetch-depth: 0), not just the working tree,
+  # because a secret that was committed and then "deleted" is still in the
+  # history and still leaked. Rules live in `.gitleaks.toml`.
+  #
+  # Note: the official action is free for personal repos. Organisation repos
+  # need a GITLEAKS_LICENSE secret (free tier available at gitleaks.io).
+  # ---------------------------------------------------------------------------
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write # lets gitleaks comment on the PR with findings
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Uncomment for organisation-owned repositories:
+          # GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+          GITLEAKS_ENABLE_SUMMARY: 'true'
+
+  # ---------------------------------------------------------------------------
+  # 3. Static analysis (SAST) with Semgrep.
+  #
+  # Rulesets:
+  #   p/ci            curated, low-noise, high-confidence rules for CI
+  #   p/nodejs        Node-specific: unsafe eval, path traversal, child_process
+  #   p/owasp-top-ten injection, broken auth, XSS, SSRF, etc.
+  #
+  # Findings are uploaded as SARIF so they appear in the repo's
+  # Security > Code scanning tab with inline annotations on the PR diff.
+  # `.semgrepignore` keeps tests and build output out of the scan.
+  # ---------------------------------------------------------------------------
+  sast:
+    name: SAST (Semgrep)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: semgrep/semgrep:latest
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to Code scanning
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Semgrep scan
+        run: >-
+          semgrep scan
+          --config p/ci
+          --config p/nodejs
+          --config p/owasp-top-ten
+          --sarif --output semgrep.sarif
+          --error
+          --metrics=off
+        # --error  → non-zero exit when findings exist (blocks the PR)
+        # --metrics=off → no telemetry; fine to re-enable if you use Semgrep Cloud
+
+      - name: Upload SARIF to GitHub Code scanning
+        if: always() # upload even when the scan step failed on findings
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  # ---------------------------------------------------------------------------
+  # 4. Dependency review (pull requests only).
+  #
+  # Diffs the lockfile between base and head and blocks the PR if it ADDS a
+  # package with a known vulnerability (>= high) or an incompatible licence.
+  # Complements npm audit: audit looks at what you have, this looks at what
+  # the PR is about to bring in. Requires the Dependency graph to be enabled
+  # (on by default for public repos; Settings > Security for private ones).
+  # ---------------------------------------------------------------------------
+  dependency-review:
+    name: Dependency review (PR diff)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write # writes a summary comment on the PR
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Dependency review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          # Block copyleft licences that are usually incompatible with
+          # closed-source products. Adjust to your legal requirements.
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0
+          comment-summary-in-pr: on-failure
+
+  # ---------------------------------------------------------------------------
+  # 5. CodeQL (optional but recommended).
+  #
+  # GitHub's own semantic analysis engine. Slower than Semgrep (minutes, not
+  # seconds) but tracks data flow across files, which catches things like
+  # "user input reaches `exec()` three function calls later".
+  #
+  # Free for public repositories. Private repositories need GitHub Advanced
+  # Security (GHAS); remove or comment out this job if you don't have it,
+  # otherwise the job fails with a licensing error.
+  # ---------------------------------------------------------------------------
+  codeql:
+    name: CodeQL (JavaScript/TypeScript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write # upload results to Code scanning
+      actions: read # needed for workflow run metadata on private repos
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # `security-extended` adds lower-precision but useful queries on top
+          # of the default suite. Use `security-and-quality` for even more.
+          queries: security-extended
+
+      # TypeScript is extracted from source; no compile step needed for JS/TS.
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: codeql

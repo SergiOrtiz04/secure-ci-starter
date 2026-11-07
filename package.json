@@ -1,0 +1,46 @@
+{
+  "name": "secure-ci-starter",
+  "version": "1.0.0",
+  "description": "Minimal Node.js/TypeScript Express API with a complete GitHub Actions security pipeline (npm audit, gitleaks, Semgrep, dependency review, CodeQL).",
+  "author": "Sergio Ortiz",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "audit": "npm audit --audit-level=high",
+    "scan": "bash scripts/local-scan.sh"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "helmet": "^8.1.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/express": "^5.0.3",
+    "@types/node": "^20.19.0",
+    "@types/supertest": "^6.0.3",
+    "eslint": "^10.14.0",
+    "supertest": "^7.1.4",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.0",
+    "vitest": "~4.1.12"
+  },
+  "overrides": {
+    "minimatch": "^11.0.5"
+  }
+}

@@ -1,0 +1,44 @@
+# gitleaks configuration
+# Docs: https://github.com/gitleaks/gitleaks#configuration
+#
+# Strategy: start from the built-in default ruleset (hundreds of provider-
+# specific patterns: AWS, GitHub, Stripe, Slack, private keys, JWTs, ...) and
+# add a small allowlist for files that legitimately contain secret-shaped
+# strings (lockfile integrity hashes, example env files).
+#
+# Resist the temptation to allowlist broadly. A false positive costs one
+# minute to triage; a false negative can cost a company.
+
+title = "secure-ci-starter gitleaks config"
+
+[extend]
+# Inherit every default rule. Our additions below only narrow the scope.
+useDefault = true
+
+[allowlist]
+description = "Global allowlist"
+
+# Files that are safe to skip entirely.
+paths = [
+  # Lockfiles contain long base64 integrity hashes that trip entropy rules.
+  '''package-lock\.json$''',
+  '''pnpm-lock\.yaml$''',
+  '''yarn\.lock$''',
+  # Example env file: values are placeholders by design (see README).
+  '''\.env\.example$''',
+  # Build output and dependencies are never scanned (also in .gitignore).
+  '''^dist/''',
+  '''^node_modules/''',
+  # Documentation that intentionally shows what a leaked secret looks like.
+  '''^docs/findings-example\.md$''',
+]
+
+# Specific strings that are known-safe. Use sparingly.
+regexes = [
+  # The documented demo password used by seed users.
+  '''correct horse battery staple''',
+]
+
+# Marker you can put on a line to skip it (e.g. test fixtures with fake keys):
+#   const FAKE_KEY = "AKIA..." // gitleaks:allow
+# No extra config needed; the default `gitleaks:allow` comment is honoured.
