@@ -12,9 +12,10 @@
 # Design choices worth copying into your own repos:
 #   - `permissions:` is set to the minimum at the top and widened per job only
 #     where an action genuinely needs it (SARIF upload, PR comments).
-#   - Every third-party action is pinned to a release tag. For stricter
-#     supply-chain hygiene, pin to a full commit SHA instead (Dependabot keeps
-#     SHA pins updated too).
+#   - Every third-party action is pinned to a full commit SHA (the version tag
+#     is kept as a comment). A tag can be moved to malicious code; a SHA
+#     cannot. Dependabot keeps SHA pins updated too. Semgrep's own ruleset
+#     flags mutable tags, so this pipeline fails its own scan without pins.
 #   - `concurrency` cancels superseded runs on the same branch to save minutes.
 #   - A weekly `schedule` re-runs the scans even when nobody pushes, because
 #     new CVEs are published against OLD code every day.
@@ -59,10 +60,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -96,8 +97,12 @@ jobs:
   # because a secret that was committed and then "deleted" is still in the
   # history and still leaked. Rules live in `.gitleaks.toml`.
   #
-  # Note: the official action is free for personal repos. Organisation repos
-  # need a GITLEAKS_LICENSE secret (free tier available at gitleaks.io).
+  # We run the gitleaks binary directly instead of gitleaks-action:
+  #   - the action scans only the pushed commit range and breaks on a repo's
+  #     very first push (it computes `<first-commit>^`, which does not exist);
+  #   - a direct run is deterministic: pinned version + SHA-256 checksum,
+  #     no license key, no GitHub token needed.
+  # Findings are uploaded as SARIF to Security > Code scanning.
   # ---------------------------------------------------------------------------
   secret-scan:
     name: Secret scan (gitleaks)
@@ -105,20 +110,42 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: write # lets gitleaks comment on the PR with findings
+      security-events: write # upload SARIF to Code scanning
+    env:
+      GITLEAKS_VERSION: 8.29.1
+      GITLEAKS_SHA256: e4eb209d04e20339d77122a3bdf9cd41351255cfb27ebcb75e85325e04f88924
     steps:
       - name: Checkout (full history)
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
-      - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Uncomment for organisation-owned repositories:
-          # GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
-          GITLEAKS_ENABLE_SUMMARY: 'true'
+      - name: Install gitleaks (pinned, checksum-verified)
+        run: |
+          set -euo pipefail
+          curl -sSL -o gitleaks.tgz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Scan full git history
+        run: >-
+          gitleaks git .
+          --config .gitleaks.toml
+          --redact
+          --exit-code 1
+          --report-format sarif
+          --report-path gitleaks.sarif
+          --verbose
+
+      - name: Upload SARIF to GitHub Code scanning
+        if: always() # upload even when the scan found something
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with:
+          sarif_file: gitleaks.sarif
+          category: gitleaks
 
   # ---------------------------------------------------------------------------
   # 3. Static analysis (SAST) with Semgrep.
@@ -137,13 +164,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
-      image: semgrep/semgrep:latest
+      image: semgrep/semgrep:latest # pin to a version tag (e.g. semgrep/semgrep:1.x) once you settle on one
     permissions:
       contents: read
       security-events: write # upload SARIF to Code scanning
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Semgrep scan
         run: >-
@@ -159,7 +186,7 @@ jobs:
 
       - name: Upload SARIF to GitHub Code scanning
         if: always() # upload even when the scan step failed on findings
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           sarif_file: semgrep.sarif
           category: semgrep
@@ -183,10 +210,10 @@ jobs:
       pull-requests: write # writes a summary comment on the PR
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Dependency review
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
           # Block copyleft licences that are usually incompatible with
@@ -215,10 +242,10 @@ jobs:
       actions: read # needed for workflow run metadata on private repos
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           languages: javascript-typescript
           # `security-extended` adds lower-precision but useful queries on top
@@ -227,6 +254,6 @@ jobs:
 
       # TypeScript is extracted from source; no compile step needed for JS/TS.
       - name: Analyze
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           category: codeql

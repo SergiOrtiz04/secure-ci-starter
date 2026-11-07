@@ -52,8 +52,11 @@ Supporting files:
 | `docs/findings-example.md`          | What the report to a client looks like                                  |
 
 Pipeline hygiene baked in: top-level `permissions: contents: read` with
-per-job widening only where needed, actions pinned by version tag (switch to
-SHA pins for stricter supply-chain control), `concurrency` groups that cancel
+per-job widening only where needed, every action pinned to a full commit SHA
+(a tag can be moved, a SHA cannot; Semgrep's ruleset flags mutable tags, so the
+pipeline would fail its own scan otherwise), gitleaks installed from a pinned,
+checksum-verified release, Dependabot with a 7-day cooldown on new versions,
+`concurrency` groups that cancel
 superseded runs, and `npm ci` (never `npm install`) so CI tests exactly what the
 lockfile says.
 

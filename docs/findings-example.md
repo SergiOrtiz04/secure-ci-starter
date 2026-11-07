@@ -142,7 +142,7 @@ Being explicit about limits is part of the deliverable:
 
 1. Enable branch protection on `main` requiring the `Security` and `CI`
    workflows to pass before merge.
-2. Add `GITLEAKS_LICENSE` (free for small orgs) if the repo moves to an
-   organisation account.
+2. Keep the SHA pins current: review Dependabot's weekly `chore(actions)` PRs
+   rather than ignoring them.
 3. Schedule a short authorisation review of the API once the baseline has run
    for a month and the team is used to the PR checklist.

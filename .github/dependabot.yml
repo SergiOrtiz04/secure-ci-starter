@@ -8,6 +8,10 @@ updates:
   # npm packages: weekly, grouped so you review one PR instead of fifteen.
   - package-ecosystem: npm
     directory: /
+    # Wait a few days before proposing a brand-new release: most malicious or
+    # broken npm versions are pulled within 72 h of publication.
+    cooldown:
+      default-days: 7
     schedule:
       interval: weekly
       day: monday
@@ -28,6 +32,8 @@ updates:
   # GitHub Actions used in .github/workflows — these are dependencies too.
   - package-ecosystem: github-actions
     directory: /
+    cooldown:
+      default-days: 7
     schedule:
       interval: weekly
       day: monday
