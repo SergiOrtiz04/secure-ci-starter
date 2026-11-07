@@ -159,7 +159,7 @@ jobs:
 
       - name: Upload SARIF to GitHub Code scanning
         if: always() # upload even when the scan step failed on findings
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: semgrep.sarif
           category: semgrep
@@ -218,7 +218,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
           # `security-extended` adds lower-precision but useful queries on top
@@ -227,6 +227,6 @@ jobs:
 
       # TypeScript is extracted from source; no compile step needed for JS/TS.
       - name: Analyze
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: codeql
