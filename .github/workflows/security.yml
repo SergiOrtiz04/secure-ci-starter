@@ -59,7 +59,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -108,7 +108,7 @@ jobs:
       pull-requests: write # lets gitleaks comment on the PR with findings
     steps:
       - name: Checkout (full history)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -143,7 +143,7 @@ jobs:
       security-events: write # upload SARIF to Code scanning
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Semgrep scan
         run: >-
@@ -183,7 +183,7 @@ jobs:
       pull-requests: write # writes a summary comment on the PR
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Dependency review
         uses: actions/dependency-review-action@v4
@@ -215,7 +215,7 @@ jobs:
       actions: read # needed for workflow run metadata on private repos
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
